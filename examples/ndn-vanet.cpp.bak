@@ -122,6 +122,7 @@ main(int argc, char* argv[])
   NodeContainer nodes;
   nodes.Create (nodeNum);
 
+  // install mobility model
   ns2.Install (); // configure movements for each node, while reading trace file
 
 
@@ -180,7 +181,9 @@ main(int argc, char* argv[])
   producerHelper.Install(nodes.Get(1));
 
   ////////////////
-  Simulator::Stop(Seconds(duration));
+
+  Simulator::Stop(Seconds(5.0));
+
   Simulator::Run();
   Simulator::Destroy();
 
