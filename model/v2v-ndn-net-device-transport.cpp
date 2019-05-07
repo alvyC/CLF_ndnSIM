@@ -26,8 +26,10 @@
 #include <ndn-cxx/encoding/block.hpp>
 #include <ndn-cxx/interest.hpp>
 #include <ndn-cxx/data.hpp>
-
+#include <ndn-cxx/lp/packet.hpp>
+#include <ndn-cxx/lp/location-header.hpp>
 #include "ns3/queue.h"
+#include "ns3/mobility-model.h"
 
 NS_LOG_COMPONENT_DEFINE("ndn.V2VNetDeviceTransport");
 
@@ -111,14 +113,41 @@ V2VNetDeviceTransport::doSend(Packet&& packet)
   NS_LOG_FUNCTION(this << "Sending packet from netDevice with URI"
                   << this->getLocalUri());
   
-  /* todo: (1) convert Transport::Packet to Lp::Packet
-           (2) Attach current position to Lp::packet in the Previous Hop Location Field
-	   (3) convert back to Transport::Packet
-   */
+  // convert Transport::Packet to Lp::Packet
+  ::ndn::lp::Packet lpPacket(packet.packet);
+  
+  // get current location
+  Ptr<MobilityModel> mobility = m_node->GetObject<MobilityModel> ();
+  if (mobility == 0) {
+    NS_FATAL_ERROR("Mobility model has to be installed on the node");
+    return;
+  }
+  Vector3D currentPosition = mobility->GetPosition();
+  
+  // TODO: Need to save the DestLocation field before adding LocationHeader
+  
+  // get the location information 
+  ::ndn::lp::LocationHeader lh;
+  ::ndn::Location prevLocation(currentPosition.x, currentPosition.y);
+  ::ndn::Location myLocation(0.0, 0.0);
+  ::ndn::Location destLocation(0.0, 0.0); // TODO: get it from forwarding stratagy
+  
+  // Populate PrevLocation and DestLoation Field (MyLocationField will have dumy value)) of LocationHeader
+  lh.setMyLocation(myLocation);
+  lh.setPrevLocation(prevLocation);
+  lh.setDestLocation(destLocation);
+
+  // add the header
+  lpPacket.add<::ndn::lp::LocationField>(lh);
+
+  //NS_LOG_FUNCTION(this << "PrevLocation field: " << prevLocation.getLongitude() << ", " << prevLocation.getLatitude()); 
+  //NS_LOG_FUNCTION(this << "DestLocation field: " << destLocation.getLongitude() << ", " << destLocation.getLatitude()); 
+  
+  // convert back to Transport::Packet
+  Transport::Packet transportPacket(lpPacket.wireEncode());
 
   // convert NFD packet to NS3 packet
-  BlockHeader header(packet);
-
+  BlockHeader header(transportPacket);
   Ptr<ns3::Packet> ns3Packet = Create<ns3::Packet>();
   ns3Packet->AddHeader(header);
 
@@ -130,27 +159,58 @@ V2VNetDeviceTransport::doSend(Packet&& packet)
 // callback
 void
 V2VNetDeviceTransport::receiveFromNetDevice(Ptr<NetDevice> device,
-                                      Ptr<const ns3::Packet> p,
-                                      uint16_t protocol,
-                                      const Address& from, const Address& to,
-                                      NetDevice::PacketType packetType)
+                                            Ptr<const ns3::Packet> p,
+                                            uint16_t protocol,
+                                            const Address& from, const Address& to,
+                                            NetDevice::PacketType packetType)
 {
   NS_LOG_FUNCTION(device << p << protocol << from << to << packetType);
 
   // Convert NS3 packet to NFD packet
   Ptr<ns3::Packet> packet = p->Copy();
-
   BlockHeader header;
   packet->RemoveHeader(header);
-
   auto nfdPacket = Packet(std::move(header.getBlock()));
   
-  /* todo: (1) convert Transport::Packet to Lp::Packet
-           (2) Attach current position to Lp::packet in the My Location Field
-	   (3) convert back to Transport::Packet
-   */
+  // convert Transport::Packet to Lp::Packet + get and save PrevLocation, DestLocation field
+  //     + remove LocationHeader
+  ::ndn::lp::Packet lpPacket(nfdPacket.packet);
+  ::ndn::lp::LocationHeader lh_tmp = lpPacket.get<lp::LocationField>(0); 
+  ::ndn::Location prevLocation = lh_tmp.getPrevLocation();
+  //::ndn::Location destLocation = lh_tmp.getDestLocation();
+  ::ndn::Location destLocation(250.0, 0.0); // for testing puspose, replace it with prev line
+
+  lpPacket.remove<lp::LocationField>(0);
   
-  this->receive(std::move(nfdPacket));
+  // TODO: Also need to save the DestLocation
+
+  // get current position
+  Ptr<MobilityModel> mobility = m_node->GetObject<MobilityModel> ();
+  if (mobility == 0) {
+    NS_FATAL_ERROR("Mobility model has to be installed on the node");
+    return;
+  }
+  Vector3D currentPosition = mobility->GetPosition();
+
+  ::ndn::lp::LocationHeader lh;
+  ::ndn::Location myLocation(currentPosition.x, currentPosition.y);
+  
+  // Populate MyLocation, PrevLocation Field (DestLocation field will have a dummy value) of LocationHeader
+  lh.setMyLocation(myLocation);
+  lh.setPrevLocation(prevLocation);
+  lh.setDestLocation(destLocation);
+  
+  // add the header
+  lpPacket.add<::ndn::lp::LocationField>(lh);
+
+  /*NS_LOG_FUNCTION(this << "MyLocation field: " <<  myLocation.getLongitude()  << ", " << myLocation.getLatitude());
+  NS_LOG_FUNCTION(this << "PrevLocation field: " << prevLocation.getLongitude() << ", " << prevLocation.getLatitude()); 
+  NS_LOG_FUNCTION(this << "DestLocation field: " << destLocation.getLongitude() << ", " << destLocation.getLatitude()); 
+	*/
+
+  // convert back to Transport::Packet
+  Transport::Packet transportPacket(lpPacket.wireEncode());
+  this->receive(std::move(transportPacket));
 }
 
 Ptr<NetDevice>

@@ -43,11 +43,12 @@ class V2VNetDeviceTransport : public nfd::face::Transport
 {
 public:
   V2VNetDeviceTransport(Ptr<Node> node, const Ptr<NetDevice>& netDevice,
-                     const std::string& localUri,
-                     const std::string& remoteUri,
-                     ::ndn::nfd::FaceScope scope = ::ndn::nfd::FACE_SCOPE_NON_LOCAL,
-                     ::ndn::nfd::FacePersistency persistency = ::ndn::nfd::FACE_PERSISTENCY_PERSISTENT,
-                     ::ndn::nfd::LinkType linkType = ::ndn::nfd::LINK_TYPE_POINT_TO_POINT);
+                        const std::string& localUri,
+                        const std::string& remoteUri,
+                        ::ndn::nfd::FaceScope scope = ::ndn::nfd::FACE_SCOPE_NON_LOCAL,
+                        ::ndn::nfd::FacePersistency persistency = ::ndn::nfd::FACE_PERSISTENCY_PERSISTENT,
+                        ::ndn::nfd::LinkType linkType = ::ndn::nfd::LINK_TYPE_AD_HOC);
+                        //::ndn::nfd::LinkType linkType = ::ndn::nfd::LINK_TYPE_POINT_TO_POINT);
 
   ~V2VNetDeviceTransport();
 
