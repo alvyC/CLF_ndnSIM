@@ -23,7 +23,6 @@
 #include "ns3/wifi-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/ns2-mobility-helper.h"
 
 #include "ns3/ndnSIM-module.h"
 
@@ -33,7 +32,7 @@
 using namespace std;
 namespace ns3 {
 
-NS_LOG_COMPONENT_DEFINE("ndn.VanetExample");
+NS_LOG_COMPONENT_DEFINE("ndn.WifiExample");
 
 std::string
 constructFaceUri(Ptr<NetDevice> netDevice)
@@ -74,6 +73,10 @@ V2VNetDeviceFaceCallback (Ptr<Node> node, Ptr<ndn::L3Protocol> ndn,
   
   return face;
 }
+//
+// DISCLAIMER:  Note that this is an extremely simple example, containing just 2 wifi nodes
+// communicating directly over AdHoc channel.
+//
 
 int
 main(int argc, char* argv[])
@@ -84,46 +87,8 @@ main(int argc, char* argv[])
   Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode",
                      StringValue("OfdmRate24Mbps"));
 
-  std::string traceFile;
-  std::string logFile;
-  int    nodeNum;
-  double duration;
-
   CommandLine cmd;
-  cmd.AddValue ("traceFile", "Ns2 movement trace file", traceFile);
-  cmd.AddValue ("nodeNum", "Number of nodes", nodeNum);
-  cmd.AddValue ("duration", "Duration of Simulation", duration);
-  cmd.AddValue ("logFile", "Log file", logFile);
   cmd.Parse(argc, argv);
-  
-  // Check command line arguments
-  if (traceFile.empty () || nodeNum <= 0 || duration <= 0 || logFile.empty ()) {
-      std::cout << "Usage of " << argv[0] << " :\n\n"
-      "./waf --run \"ns2-mobility-trace"
-      " --traceFile=src/mobility/examples/default.ns_movements"
-      " --nodeNum=2 --duration=100.0 --logFile=ns2-mob.log\" \n\n"
-      "NOTE: ns2-traces-file could be an absolute or relative path. You could use the file default.ns_movements\n"
-      "      included in the same directory of this example file.\n\n"
-      "NOTE 2: Number of nodes present in the trace file must match with the command line argument and must\n"
-      "        be a positive number. Note that you must know it before to be able to load it.\n\n"
-      "NOTE 3: Duration must be a positive number. Note that you must know it before to be able to load it.\n\n";
-
-      return 0;
-  }
-
-  // Create Ns2MobilityHelper with the specified trace log file as parameter
-  Ns2MobilityHelper ns2 = Ns2MobilityHelper (traceFile);
-
-  // open log file for output
-  std::ofstream os;
-  os.open (logFile.c_str ());
-  
-  // Create all nodes.
-  NodeContainer nodes;
-  nodes.Create (nodeNum);
-
-  ns2.Install (); // configure movements for each node, while reading trace file
-
 
   //////////////////////
   //////////////////////
@@ -133,56 +98,71 @@ main(int argc, char* argv[])
   wifi.SetStandard(WIFI_PHY_STANDARD_80211a);
   wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager", "DataMode",
                                StringValue("OfdmRate24Mbps"));
+  
+  //wifi.EnableLogComponents();
 
   YansWifiChannelHelper wifiChannel; // = YansWifiChannelHelper::Default ();
-  //wifiChannel.AddPropagationLoss("ns3::ThreeLogDistancePropagationLossModel");
-  //wifiChannel.AddPropagationLoss("ns3::NakagamiPropagationLossModel");
   wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
   wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.0));
-
+  
   // YansWifiPhy wifiPhy = YansWifiPhy::Default();
   YansWifiPhyHelper wifiPhyHelper = YansWifiPhyHelper::Default();
   wifiPhyHelper.SetChannel(wifiChannel.Create());
-  /*wifiPhyHelper.Set("TxPowerStart", DoubleValue(2));
-  wifiPhyHelper.Set("TxPowerEnd", DoubleValue(2));*/
 
   WifiMacHelper wifiMacHelper;
   wifiMacHelper.SetType("ns3::AdhocWifiMac");
-  
+
+//  std::string traceFile="/vagrant/ndnSIM/ns-3/mhg_scenario_9_node.ns_movements"; 
+  std::string traceFile="/vagrant/mhg_scenario_100_node.ns_movements"; 
+  Ns2MobilityHelper ns2 = Ns2MobilityHelper (traceFile);
+
+  int numOfNodes = 100;
+  NodeContainer nodes;
+  nodes.Create(numOfNodes);
+
+  ns2.Install (); // configure movements for each node, while reading trace file
   
   ////////////////
   // 1. Install Wifi
   NetDeviceContainer wifiNetDevices = wifi.Install(wifiPhyHelper, wifiMacHelper, nodes);
 
-  // 2. Install NDN stack
+  // 3. Install NDN stack
   NS_LOG_INFO("Installing NDN stack");
   ndn::StackHelper ndnHelper;
+  // ndnHelper.AddNetDeviceFaceCreateCallback (WifiNetDevice::GetTypeId (), MakeCallback
+  // (MyNetDeviceFaceCallback));
   ndnHelper.AddFaceCreateCallback (WifiNetDevice::GetTypeId (), MakeCallback(V2VNetDeviceFaceCallback));
   ndnHelper.SetOldContentStore("ns3::ndn::cs::Lru", "MaxSize", "1000");
   ndnHelper.SetDefaultRoutes(true);
   ndnHelper.Install(nodes);
 
   // Set BestRoute strategy
-  //ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/asf");
-  ndn::StrategyChoiceHelper::Install(nodes, "/test/prefix", "/localhost/nfd/strategy/clf");
+  ndn::StrategyChoiceHelper::Install(nodes, "/test", "/localhost/nfd/strategy/clf");
+  //ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/clf");
+  //ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/best-route");
   
   // 4. Set up applications
   NS_LOG_INFO("Installing Applications");
 
   //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
   ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
-  consumerHelper.SetPrefix("/test/prefix");
-  consumerHelper.SetAttribute("Batches", StringValue("5s 1 10s 1 15s 1 20s 1 25s 1"));
-  //consumerHelper.SetAttribute("Frequency", StringValue("1"));
+  consumerHelper.SetPrefix("/test/prefix/a");
+  //consumerHelper.SetAttribute("Frequency", DoubleValue(1.0));
+  consumerHelper.SetAttribute("Batches", StringValue("1s 1 8s 1 14s 1 20s 1"));
+  //consumerHelper.SetAttribute("Batches", StringValue("5s 1 10s 1 15s 1 20s 1 25s 1"));
   consumerHelper.Install(nodes.Get(0));
 
-  ndn::AppHelper producerHelper("ns3::ndn::Producer");
-  producerHelper.SetPrefix("/");
+  ndn::AppHelper producerHelper("ns3::ndn::ClfProducer");
+  producerHelper.SetPrefix("/test/prefix");
   producerHelper.SetAttribute("PayloadSize", StringValue("1200"));
-  producerHelper.Install(nodes.Get(1));
+  producerHelper.Install(nodes.Get(numOfNodes - 1));
 
   ////////////////
-  Simulator::Stop(Seconds(duration));
+
+  Simulator::Stop(Seconds(40.0));
+
+  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/100-grid-rate-trace.txt", Seconds(39.0));
+  
   Simulator::Run();
   Simulator::Destroy();
 

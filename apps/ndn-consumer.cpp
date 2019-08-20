@@ -183,9 +183,12 @@ Consumer::SendPacket()
 
   //
   shared_ptr<Name> nameWithSequence = make_shared<Name>(m_interestName);
+  nameWithSequence->append(std::to_string(seq)); // my change
   nameWithSequence->appendSequenceNumber(seq);
   //
 
+  NS_LOG_INFO("Interest: " << m_interestName.toUri() << ". NameWithSequence: " << nameWithSequence->toUri());  // my change
+  
   // shared_ptr<Interest> interest = make_shared<Interest> ();
   shared_ptr<Interest> interest = make_shared<Interest>();
   interest->setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
