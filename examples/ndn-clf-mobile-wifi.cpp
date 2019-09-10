@@ -120,8 +120,8 @@ main(int argc, char* argv[])
    * */
   ObjectFactory pos;
   pos.SetTypeId ("ns3::RandomRectanglePositionAllocator");
-  pos.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=300.0]"));
-  pos.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=1500.0]"));
+  pos.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=80.0]"));
+  pos.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=80.0]"));
   // we need antenna height uniform [1.0 .. 2.0] for loss model
   //pos.Set ("Z", StringValue ("ns3::UniformRandomVariable[Min=1.0|Max=2.0]"));
 
@@ -141,7 +141,7 @@ main(int argc, char* argv[])
                              "Pause", StringValue (ssPause.str ()),
                              "PositionAllocator", PointerValue (taPositionAlloc));
   
-  int numOfNodes = 5;
+  int numOfNodes = 10;
   NodeContainer nodes;
   nodes.Create(numOfNodes);
 
@@ -188,9 +188,11 @@ main(int argc, char* argv[])
 
   ////////////////
 
-  Simulator::Stop(Seconds(40.0));
+  Simulator::Stop(Seconds(60.0));
 
-  ndn::L3RateTracer::InstallAll("rate-trace.txt", Seconds(39));
+  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/9-mobile-waypoint-rate-trace.txt", Seconds(59.0));
+  L2RateTracer::InstallAll("/vagrant/ndnSIM/9-mobile-waypoint-drop-trace.txt", Seconds(59.0));
+  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/9-mobile-waypoint-app-delays-trace.txt");
 
   Simulator::Run();
   Simulator::Destroy();

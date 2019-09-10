@@ -103,7 +103,9 @@ main(int argc, char* argv[])
 
   YansWifiChannelHelper wifiChannel; // = YansWifiChannelHelper::Default ();
   wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
-  wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.0));
+  //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.0)); // range = 46
+  //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.5)); // range = 26
+  wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (2.085)); // range = 34
   
   // YansWifiPhy wifiPhy = YansWifiPhy::Default();
   YansWifiPhyHelper wifiPhyHelper = YansWifiPhyHelper::Default();
@@ -112,11 +114,11 @@ main(int argc, char* argv[])
   WifiMacHelper wifiMacHelper;
   wifiMacHelper.SetType("ns3::AdhocWifiMac");
 
-//  std::string traceFile="/vagrant/ndnSIM/ns-3/mhg_scenario_9_node.ns_movements"; 
-  std::string traceFile="/vagrant/mhg_scenario_100_node.ns_movements"; 
+  std::string traceFile="/vagrant/ndnSIM/ns-3/mhg_scenario_9_node.ns_movements"; 
+  //std::string traceFile="/vagrant/mhg_scenario_100_node.ns_movements"; 
   Ns2MobilityHelper ns2 = Ns2MobilityHelper (traceFile);
 
-  int numOfNodes = 100;
+  int numOfNodes = 10;
   NodeContainer nodes;
   nodes.Create(numOfNodes);
 
@@ -144,11 +146,11 @@ main(int argc, char* argv[])
   // 4. Set up applications
   NS_LOG_INFO("Installing Applications");
 
-  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
-  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
-  consumerHelper.SetPrefix("/test/prefix/a");
-  //consumerHelper.SetAttribute("Frequency", DoubleValue(1.0));
-  consumerHelper.SetAttribute("Batches", StringValue("1s 1 8s 1 14s 1 20s 1"));
+  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
+  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
+  consumerHelper.SetPrefix("/test/prefix/a/b");
+  consumerHelper.SetAttribute("Frequency", DoubleValue(1.0));
+  //consumerHelper.SetAttribute("Batches", StringValue("1s 1 8s 1 14s 1 20s 1"));
   //consumerHelper.SetAttribute("Batches", StringValue("5s 1 10s 1 15s 1 20s 1 25s 1"));
   consumerHelper.Install(nodes.Get(0));
 
@@ -156,12 +158,18 @@ main(int argc, char* argv[])
   producerHelper.SetPrefix("/test/prefix");
   producerHelper.SetAttribute("PayloadSize", StringValue("1200"));
   producerHelper.Install(nodes.Get(numOfNodes - 1));
-
+ 
+  /*for (int i = 0; i < 10; i++) {
+    int nodeNo = rand() % numOfNodes;
+    producerHelper.Install(nodes.Get(nodeNo));
+  }*/
   ////////////////
 
-  Simulator::Stop(Seconds(40.0));
+  Simulator::Stop(Seconds(590.0));
 
-  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/100-grid-rate-trace.txt", Seconds(39.0));
+  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/9-mobile-grid-rate-trace.txt", Seconds(589.0));
+  L2RateTracer::InstallAll("/vagrant/ndnSIM/9-mobile-grid-rate-drop-trace.txt", Seconds(589.0));
+  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/9-mobile-grid-app-delays-trace.txt");
   
   Simulator::Run();
   Simulator::Destroy();

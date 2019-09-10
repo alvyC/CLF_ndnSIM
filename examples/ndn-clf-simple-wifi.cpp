@@ -105,7 +105,9 @@ main(int argc, char* argv[])
   //wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel");
   //double rss = -80;  // -dBm
   //wifiChannel.AddPropagationLoss ("ns3::FixedRssLossModel","Rss",DoubleValue (rss));
-  wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.0));
+  //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.0)); // range = 46
+  //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.5)); // range = 26
+  wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (2.085)); // range = 
 
   // YansWifiPhy wifiPhy = YansWifiPhy::Default();
   YansWifiPhyHelper wifiPhyHelper = YansWifiPhyHelper::Default();
@@ -140,10 +142,10 @@ main(int argc, char* argv[])
   /* Test scenario: multihop (range is 46)
    * */
   
-  /*positionAlloc->Add (Vector (50.0, 0.0, 0.0));
-  positionAlloc->Add (Vector (90.0, 0.0, 0.0));
-  positionAlloc->Add (Vector (130.0, 0.0, 0.0));*/
-  /*positionAlloc->Add (Vector (170.0, 0.0, 0.0));
+  positionAlloc->Add (Vector (50.0, 0.0, 0.0));
+  positionAlloc->Add (Vector (301.0, 0.0, 0.0));
+  /*positionAlloc->Add (Vector (130.0, 0.0, 0.0));
+  positionAlloc->Add (Vector (170.0, 0.0, 0.0));
   positionAlloc->Add (Vector (210.0, 0.0, 0.0));
   positionAlloc->Add (Vector (250.0, 0.0, 0.0));
   */
@@ -154,10 +156,10 @@ main(int argc, char* argv[])
    * Navigo: Only Node#2 will forward since it closer to Node#3 (destination)
    * CLF: w/o centrality same as Navigo
    */
-  positionAlloc->Add (Vector (50.0, 0.0, 0.0));
+  /*positionAlloc->Add (Vector (50.0, 0.0, 0.0));
   positionAlloc->Add (Vector (70.0, 0.0, 0.0)); // this node is in range of node 0
-  //positionAlloc->Add (Vector (90.0, 0.0, 0.0)); // this node is also in range of node 0
-  //positionAlloc->Add (Vector (130.0, 0.0, 0.0));
+  positionAlloc->Add (Vector (90.0, 0.0, 0.0)); // this node is also in range of node 0
+  positionAlloc->Add (Vector (130.0, 0.0, 0.0));*/
   //positionAlloc->Add (Vector (230.0, 0.0, 0.0));
 
   mobility.SetPositionAllocator (positionAlloc);
@@ -192,26 +194,26 @@ main(int argc, char* argv[])
   // 4. Set up applications
   NS_LOG_INFO("Installing Applications");
 
-  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
-  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
+  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
+  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
   consumerHelper.SetPrefix("/test/prefix/a/b");
-  //consumerHelper.SetAttribute("Frequency", DoubleValue(10.0));
+  consumerHelper.SetAttribute("Frequency", DoubleValue(1.0));
   //consumerHelper.SetAttribute("Batches", StringValue("1s 1 5s 1 10s 1 15s 1 20s 1 25s 1 30s 1"));
-  consumerHelper.SetAttribute("Batches", StringValue("1s 1"));
+  //consumerHelper.SetAttribute("Batches", StringValue("1s 1"));
   consumerHelper.Install(nodes.Get(0));
-  //consumerHelper2.Install(nodes.Get(0));
 
   ndn::AppHelper producerHelper("ns3::ndn::ClfProducer");
   producerHelper.SetPrefix("/test/prefix");
-  //producerHelper.SetPrefix("/test/prefix/1");
   producerHelper.SetAttribute("PayloadSize", StringValue("1200"));
   producerHelper.Install(nodes.Get(numOfNodes - 1));
 
   ////////////////
 
-  Simulator::Stop(Seconds(40.0));
+  Simulator::Stop(Seconds(6.0));
 
   ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/2-linear-rate-trace.txt", Seconds(5.0));
+  L2RateTracer::InstallAll("/vagrant/ndnSIM/2-simple-rate-drop-trace.txt", Seconds(5.0));
+  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/2-simple-app-delays-trace.txt");
   
   Simulator::Run();
   Simulator::Destroy();

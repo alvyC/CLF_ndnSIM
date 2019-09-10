@@ -155,27 +155,30 @@ main(int argc, char* argv[])
   // 4. Set up applications
   NS_LOG_INFO("Installing Applications");
 
-  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
-  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
+  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
+  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
   consumerHelper.SetPrefix("/test/prefix/a/b");
-  //consumerHelper.SetAttribute("Frequency", DoubleValue(1.0)); //consumerHelper.SetAttribute("MaxSeq", IntegerValue(5));
+  consumerHelper.SetAttribute("Frequency", DoubleValue(1.0)); //consumerHelper.SetAttribute("MaxSeq", IntegerValue(5));
   //consumerHelper.SetAttribute("Batches", StringValue("1s 1 8s 1 14s 1 20s 1"));
-  consumerHelper.SetAttribute("Batches", StringValue("1s 1 2s 1 3s 1 4s 1 5s 1 6s 1 7s 1 8s 1 9s 1 10s 1"));
+  //consumerHelper.SetAttribute("Batches", StringValue("1s 1 2s 1 3s 1 4s 1 5s 1 6s 1 7s 1 8s 1 9s 1 10s 1"));
   consumerHelper.Install(nodes.Get(0));
 
   ndn::AppHelper producerHelper("ns3::ndn::ClfProducer");
   producerHelper.SetPrefix("/test/prefix");
   producerHelper.SetAttribute("PayloadSize", StringValue("1200"));
   producerHelper.Install(nodes.Get(numOfNodes - 1));
-  //producerHelper.Install(nodes.Get(3));
+  /*for (int i = 0; i < 10; i++) {
+    int nodeNo = rand() % numOfNodes;
+    producerHelper.Install(nodes.Get(nodeNo));
+  }*/
 
   ////////////////
 
-  Simulator::Stop(Seconds(11.0));
+  Simulator::Stop(Seconds(60.0));
 
-  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/9-grid-rate-trace.txt", Seconds(10.0));
-  L2RateTracer::InstallAll("/vagrant/ndnSIM/9-grid-drop-trace.txt", Seconds(10.0));
-  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/9-grid-app-delays-trace.txt");
+  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/9-static-grid-rate-trace.txt", Seconds(59.0));
+  L2RateTracer::InstallAll("/vagrant/ndnSIM/9-static-grid-drop-trace.txt", Seconds(59.0));
+  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/9-static-grid-app-delays-trace.txt");
   
   Simulator::Run();
   Simulator::Destroy();

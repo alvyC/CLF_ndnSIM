@@ -74,8 +74,8 @@ main(int argc, char* argv[])
   // YansWifiPhy wifiPhy = YansWifiPhy::Default();
   YansWifiPhyHelper wifiPhyHelper = YansWifiPhyHelper::Default();
   wifiPhyHelper.SetChannel(wifiChannel.Create());
-  wifiPhyHelper.Set("TxPowerStart", DoubleValue(5));
-  wifiPhyHelper.Set("TxPowerEnd", DoubleValue(5));
+  wifiPhyHelper.Set("TxPowerStart", DoubleValue(0));
+  wifiPhyHelper.Set("TxPowerEnd", DoubleValue(0));
 
   WifiMacHelper wifiMacHelper;
   wifiMacHelper.SetType("ns3::AdhocWifiMac");
@@ -91,7 +91,7 @@ main(int argc, char* argv[])
   mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
 
   NodeContainer nodes;
-  nodes.Create(2);
+  nodes.Create(100);
 
   ////////////////
   // 1. Install Wifi
@@ -115,11 +115,12 @@ main(int argc, char* argv[])
   // 4. Set up applications
   NS_LOG_INFO("Installing Applications");
 
-  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
-  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
+  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
+  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
   consumerHelper.SetPrefix("/test/prefix");
-  //consumerHelper.SetAttribute("Frequency", DoubleValue(10.0));
-  consumerHelper.SetAttribute("Batches", StringValue("20s 1"));
+  consumerHelper.SetAttribute("Frequency", DoubleValue(1.0));
+  //consumerHelper.SetAttribute("Batches", StringValue("20s 1"));
+  //consumerHelper.SetAttribute("Batches", StringValue("1s 1 2s 1 3s 1 4s 1 5s 1 6s 1 7s 1 8s 1 9s 1 10s 1"));
   consumerHelper.Install(nodes.Get(0));
 
   ndn::AppHelper producerHelper("ns3::ndn::Producer");
@@ -129,8 +130,9 @@ main(int argc, char* argv[])
 
   ////////////////
 
-  Simulator::Stop(Seconds(30.0));
+  Simulator::Stop(Seconds(6.0));
 
+  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/100-static-rate-trace.txt", Seconds(5.0));
   Simulator::Run();
   Simulator::Destroy();
 
