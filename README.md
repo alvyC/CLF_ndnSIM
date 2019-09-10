@@ -1,11 +1,10 @@
 ndnSIM
 ======
 
-[![Build Status](https://travis-ci.org/named-data-ndnSIM/ndnSIM.svg)](https://travis-ci.org/named-data-ndnSIM/ndnSIM)
+- This project is a fork ndnSIM (https://github.com/named-data/ndnSIM)
+- To clone the project use the following command which will clone the submodules (ndn-cxx and NFD): 
+``git clone --recursive https://github.com/named-data-ndnSIM/ndnSIM.git ns-3/src/ndnSIM``
 
-A new release of [NS-3 based Named Data Networking (NDN) simulator](http://ndnsim.net/)
-went through extensive refactoring and rewriting.  The key new features of the new
-version:
 
 - [NDN Packet Specification](http://named-data.net/doc/NDN-packet-spec/current/)
 
