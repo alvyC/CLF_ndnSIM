@@ -3,9 +3,10 @@ ndnSIM
 
 - This project is a fork ndnSIM (https://github.com/named-data/ndnSIM)
 - To clone the project use the following command which will clone the submodules (ndn-cxx and NFD): 
+
 ``git clone --recursive https://github.com/named-data-ndnSIM/ndnSIM.git ns-3/src/ndnSIM``
 
-
+- To install use the guideline from ndnSIM website: https://ndnsim.net/current/getting-started.html#compiling-and-running-ndnsim
 - [NDN Packet Specification](http://named-data.net/doc/NDN-packet-spec/current/)
 
 - ndnSIM uses implementation of basic NDN primitives from
