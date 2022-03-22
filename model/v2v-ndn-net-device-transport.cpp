@@ -32,11 +32,20 @@
 
 #include "ns3/queue.h"
 #include "ns3/mobility-model.h"
+#include "ns3/simulator.h"
+#include "ns3/nstime.h"
+#include "ns3/event-id.h"
+
+#include <random>
 
 NS_LOG_COMPONENT_DEFINE("ndn.V2VNetDeviceTransport");
 
 namespace ns3 {
 namespace ndn {
+
+const int V2VNetDeviceTransport::NeighExpTimer = 5; // in seconds
+const int V2VNetDeviceTransport::BeaconTimer = 1000; // in milliseconds
+const std::string V2VNetDeviceTransport::STRATEGY = "clf";
 
 V2VNetDeviceTransport::V2VNetDeviceTransport(Ptr<Node> node,
                                        const Ptr<NetDevice>& netDevice,
@@ -47,6 +56,7 @@ V2VNetDeviceTransport::V2VNetDeviceTransport(Ptr<Node> node,
                                        ::ndn::nfd::LinkType linkType)
   : m_netDevice(netDevice)
   , m_node(node)
+  , isNeighbor(false)
 {
   this->setLocalUri(FaceUri(localUri));
   this->setRemoteUri(FaceUri(remoteUri));
@@ -54,7 +64,7 @@ V2VNetDeviceTransport::V2VNetDeviceTransport(Ptr<Node> node,
   this->setPersistency(persistency);
   this->setLinkType(linkType);
   this->setMtu(m_netDevice->GetMtu()); // Use the MTU of the netDevice
-
+ 
   // Get send queue capacity for congestion marking
   PointerValue txQueueAttribute;
   if (m_netDevice->GetAttributeFailSafe("TxQueue", txQueueAttribute)) {
@@ -71,6 +81,7 @@ V2VNetDeviceTransport::V2VNetDeviceTransport(Ptr<Node> node,
     }
   }
 
+  NS_LOG_FUNCTION("MTU for the net device is : " << m_netDevice->GetMtu());
   NS_LOG_FUNCTION(this << "Creating an V2V transport instance for netDevice with URI"
                   << this->getLocalUri());
 
@@ -79,6 +90,24 @@ V2VNetDeviceTransport::V2VNetDeviceTransport(Ptr<Node> node,
   m_node->RegisterProtocolHandler(MakeCallback(&V2VNetDeviceTransport::receiveFromNetDevice, this),
                                   L3Protocol::ETHERNET_FRAME_TYPE, m_netDevice,
                                   true /*promiscuous mode*/);
+  
+  // send beacon in random time, otherwise nobody receives it.
+  double timer = 500; // milliseconds
+  std::random_device rd; // obtain a random number from hardware
+  std::mt19937 eng(rd()); // seed the generator 
+  double lower_bound = timer * 0.5; //5000; //timer * 0.5;
+  double upper_bound =  timer * 1.5; //40000;//timer * 1.5;
+  std::uniform_real_distribution<double> unif(lower_bound,upper_bound);
+  //std::default_random_engine re;
+  double randomTimer = unif(eng);
+  
+  // set final timer to randomTimer and convert it to us.
+  //double finalTimer = round(randomTimer * 1000);
+  double finalTimer = randomTimer;
+
+  if (V2VNetDeviceTransport::STRATEGY == "clf") { 
+    ns3::Simulator::Schedule(ns3::MilliSeconds(finalTimer), &V2VNetDeviceTransport::sendBeacon, this);
+  }
 }
 
 V2VNetDeviceTransport::~V2VNetDeviceTransport()
@@ -94,9 +123,88 @@ V2VNetDeviceTransport::getSendQueueLength()
     Ptr<ns3::QueueBase> txQueue = txQueueAttribute.Get<ns3::QueueBase>();
     return txQueue->GetNBytes();
   }
-  else {
+else {
     return nfd::face::QUEUE_UNSUPPORTED;
   }
+}
+
+void
+V2VNetDeviceTransport::sendBeacon()
+{
+  std::string beaconString = "/beacon/" + std::to_string(m_node->GetId()); 
+  ::ndn::Interest beacon(beaconString);
+  NS_LOG_FUNCTION("Sending beacon: " << beacon.getName().toUri());
+
+  ::ndn::lp::Packet lpPacket(beacon.wireEncode());
+  Transport::Packet transportPacket(lpPacket.wireEncode());
+  
+  // convert NFD packet to NS3 packet
+  BlockHeader header(transportPacket);
+  Ptr<ns3::Packet> ns3Packet = Create<ns3::Packet>();
+  ns3Packet->AddHeader(header);
+  
+  // send the NS3 packet
+  m_netDevice->Send(ns3Packet, m_netDevice->GetBroadcast(),
+                    L3Protocol::ETHERNET_FRAME_TYPE);
+  
+  double timer = 5000; // milliseconds
+  std::random_device rd; // obtain a random number from hardware
+  std::mt19937 eng(rd()); // seed the generator 
+  double lower_bound = timer * 0.5;
+  double upper_bound =  timer * 1.5;
+  std::uniform_real_distribution<double> unif(lower_bound,upper_bound);
+  //std::default_random_engine re;
+  double randomTimer = unif(eng);
+  
+  double finalTimer = randomTimer;
+
+  ns3::Simulator::Schedule(ns3::MilliSeconds(finalTimer), &V2VNetDeviceTransport::sendBeacon, this);
+}
+
+void
+V2VNetDeviceTransport::sendNoOfNeighborToStrategy()
+{
+  int noOfNeighbors = listOfNeighbor.size();
+  std::string noOfNeighborsName = "/neighbor/" + std::to_string(noOfNeighbors);
+  ndn::Interest neighborInterest(noOfNeighborsName);
+
+  /* ::ndn::SignatureSha256WithRsa fakeSignature;
+   * fakeSignature.setValue(::ndn::encoding::makeEmptyBlock(::ndn::tlv::SignatureValue));
+   * neighborData.setSignature(fakeSignature);
+   * neighborData.setContent(reinterpret_cast<const uint8_t*>(std::to_string(noOfNeighbors).c_str()), std::to_string(noOfNeighbors).size());*/
+  
+  NS_LOG_FUNCTION("Sending number of neighbors to strategy " << neighborInterest.getName().toUri());
+
+  ::ndn::lp::Packet neighborInterestLpPacket(neighborInterest.wireEncode());
+  Transport::Packet transportPacket(neighborInterestLpPacket.wireEncode());
+  this->receive(std::move(transportPacket));
+}
+
+void
+V2VNetDeviceTransport::sendInterestFromQueue()
+{
+  while(!interestQueue.empty()) {
+    NS_LOG_FUNCTION(this << "Found a neighbor. Send scheduled Interest packet from netDevice with URI: " << this->getLocalUri());
+    Ptr<ns3::Packet> ns3Packet = interestQueue.front();
+    m_netDevice->Send(ns3Packet, m_netDevice->GetBroadcast(), L3Protocol::ETHERNET_FRAME_TYPE);
+    interestQueue.pop();
+  }
+}
+
+void
+V2VNetDeviceTransport::clearIsNeighbor() {
+  NS_LOG_FUNCTION("Clearing isNeighbor flag.");
+  isNeighbor = false;
+}
+
+void
+V2VNetDeviceTransport::deleteNeighbor(int nodeId) {
+  NS_LOG_FUNCTION("Deleting node#" << nodeId << " from the neighbor list.");
+  ns3::Simulator::Cancel(listOfNeighbor[nodeId]);
+  listOfNeighbor.erase(listOfNeighbor.find(nodeId));
+  
+  // let Strategy know about this change
+  sendNoOfNeighborToStrategy();
 }
 
 void
@@ -127,6 +235,7 @@ V2VNetDeviceTransport::doSend(Packet&& packet)
     NS_FATAL_ERROR("Mobility model has to be installed on the node");
     return;
   }
+
   Vector3D currentPosition = mobility->GetPosition();
   
   // Get location header that will be used to get DestLocation from Forwarding Strategy
@@ -137,15 +246,17 @@ V2VNetDeviceTransport::doSend(Packet&& packet)
   // the lp packet contains header then save the dest location field
   ::ndn::Location destLocation(0.0, 0.0); 
   if (netPkt.type() == ::ndn::tlv::Interest) {
+    auto interest = make_shared<Interest>(netPkt);
+      
     if(lpPacket.has<lp::LocationField>()) {
       NS_LOG_FUNCTION("Interest Packet contains Location Header");
-    
+      
       ::ndn::lp::LocationHeader lh_tmp = lpPacket.get<lp::LocationField>(0);
-      
+        
       destLocation = lh_tmp.getDestLocation();// Get DestLocation which was tagged by ForwardingStrategy
-      
+        
       NS_LOG_FUNCTION(this << "DestLocation field: " << destLocation.getLongitude() << ", " << destLocation.getLatitude()); 
-      
+        
       // remove the old header and add the new header
       lpPacket.remove<::ndn::lp::LocationField>(0);
     }
@@ -196,15 +307,49 @@ V2VNetDeviceTransport::doSend(Packet&& packet)
   Ptr<ns3::Packet> ns3Packet = Create<ns3::Packet>();
   ns3Packet->AddHeader(header);
 
-  
-    
   if (netPkt.type() == ::ndn::tlv::Interest) {
-    NS_LOG_FUNCTION(this << "Sending Interest packet from netDevice with URI: "
+    // for CLF only send if there is neighbor around
+    if (V2VNetDeviceTransport::STRATEGY == "clf") { 
+      if (listOfNeighbor.size() > 0) {
+        NS_LOG_FUNCTION(this << "There is neighbor around. Sending Interest packet from netDevice with URI: " << this->getLocalUri());
+        m_netDevice->Send(ns3Packet, m_netDevice->GetBroadcast(),
+                        L3Protocol::ETHERNET_FRAME_TYPE);
+      }
+      else {
+        // otherwise put it in the queue
+        NS_LOG_FUNCTION(this << "No neighbor around. Putting Interest packet in the queue.");
+        interestQueue.push(ns3Packet);
+      }  // isNeighbor*/
+    }
+    else {
+      // for other strategies
+      NS_LOG_FUNCTION(this << "Sending Interest packet from netDevice with URI: "
                   << this->getLocalUri());
+      m_netDevice->Send(ns3Packet, m_netDevice->GetBroadcast(),
+                      L3Protocol::ETHERNET_FRAME_TYPE);
+    }
   }
   else if (netPkt.type() == ::ndn::tlv::Data) {
-    NS_LOG_FUNCTION(this << "Sending Data packet from netDevice with URI: "
+    // for CLF only send if there is neighbor around
+    if (V2VNetDeviceTransport::STRATEGY == "clf") { 
+      if (listOfNeighbor.size() > 0) {
+        NS_LOG_FUNCTION(this << "There is neighbor around. Sending Data packet from netDevice with URI: " << this->getLocalUri());
+        m_netDevice->Send(ns3Packet, m_netDevice->GetBroadcast(),
+                        L3Protocol::ETHERNET_FRAME_TYPE);
+      }
+      else {
+        // otherwise put it in the queue
+        NS_LOG_FUNCTION(this << "No neighbor around. Putting the  Data packet in the queue.");
+        interestQueue.push(ns3Packet);
+      }  // isNeighbor around
+    }
+    else { // for other strategies
+      NS_LOG_FUNCTION(this << "Sending Data packet from netDevice with URI: "
                   << this->getLocalUri());
+      // send the NS3 packet
+      m_netDevice->Send(ns3Packet, m_netDevice->GetBroadcast(),
+                      L3Protocol::ETHERNET_FRAME_TYPE);
+    }
   }
   else if (netPkt.type() == ::ndn::lp::tlv::LpPacket) {
     NS_LOG_FUNCTION(this << "Sending LpPacket packet from netDevice with URI: "
@@ -213,11 +358,7 @@ V2VNetDeviceTransport::doSend(Packet&& packet)
   else {
     NS_LOG_FUNCTION(this << "Sending packet from netDevice with URI: "
                   << this->getLocalUri() << packet.packet.type());
-  } 
-
-  // send the NS3 packet
-  m_netDevice->Send(ns3Packet, m_netDevice->GetBroadcast(),
-                    L3Protocol::ETHERNET_FRAME_TYPE);
+  }
 }
 
 // callback
@@ -229,17 +370,54 @@ V2VNetDeviceTransport::receiveFromNetDevice(Ptr<NetDevice> device,
                                             NetDevice::PacketType packetType)
 {
   NS_LOG_FUNCTION(device << p << protocol << from << to << packetType);
-
+  
   // Convert NS3 packet to transport packet
   Ptr<ns3::Packet> packet = p->Copy();
   BlockHeader header;
   packet->RemoveHeader(header);
   auto transPacket = Packet(std::move(header.getBlock()));
   
-  // convert Transport::Packet to Lp::Packet + get and save PrevLocation, DestLocation field
-  //     + remove LocationHeader
+  // convert Transport::Packet to LpPacket
   ::ndn::lp::Packet lpPacket(transPacket.packet);
   
+  // convert LpPacket to Interest to check beacon
+  ::ndn::Buffer::const_iterator fragBegin, fragEnd;
+  std::tie(fragBegin, fragEnd) = lpPacket.get<::ndn::lp::FragmentField>();
+  Block netPkt(&*fragBegin, std::distance(fragBegin, fragEnd));
+    
+  if (netPkt.type() == ::ndn::tlv::Interest) {
+    auto interest = make_shared<Interest>(netPkt);
+    if (interest->getName().get(0).toUri() == "beacon") {
+      // get node id
+      int nodeId = std::stoi(interest->getName().get(1).toUri()); 
+      
+      NS_LOG_FUNCTION("Got a beacon: " << interest->getName().toUri() << " from node#" << nodeId);
+      
+      if (listOfNeighbor.find(nodeId) != listOfNeighbor.end()) { // neighbor already in the list
+        ns3::Simulator::Cancel(listOfNeighbor[nodeId]);
+       	// schedule deletion of the neighbor
+	listOfNeighbor[nodeId] = ns3::Simulator::Schedule(ns3::Seconds(V2VNetDeviceTransport::NeighExpTimer), &V2VNetDeviceTransport::deleteNeighbor, this, nodeId);
+      }
+      else { // discovered a new neighbor
+	// schedule deletion of the neighbor
+	listOfNeighbor[nodeId] = ns3::Simulator::Schedule(ns3::Seconds(V2VNetDeviceTransport::NeighExpTimer), &V2VNetDeviceTransport::deleteNeighbor, this, nodeId);
+	
+	// let strategy know of this change
+	sendNoOfNeighborToStrategy();
+      }
+      
+      // send all the packets from the queue, since there is a neighbor
+      sendInterestFromQueue();
+
+      return; // don't do anything else if it is a beacon
+    }
+    else {
+      NS_LOG_FUNCTION("Not a beacon " << interest->getName().toUri());
+    }
+  }
+
+   // From Lp::Packet : get and save PrevLocation, DestLocation field
+  //     + remove LocationHeader
   ::ndn::Location prevLocation(0.0, 0.0);
   ::ndn::Location destLocation(0.0, 0.0);
   if(lpPacket.has<lp::LocationField>()) {
@@ -272,7 +450,8 @@ V2VNetDeviceTransport::receiveFromNetDevice(Ptr<NetDevice> device,
   
   // add the header
   lpPacket.add<::ndn::lp::LocationField>(lh);
-
+  //lpPacket.add<::ndn::lp::NoOfNeighborTagField>(listOfNeighbor.size());
+  
   NS_LOG_FUNCTION(this << "MyLocation field: " <<  myLocation.getLongitude()  << ", " << myLocation.getLatitude());
   NS_LOG_FUNCTION(this << "PrevLocation field: " << prevLocation.getLongitude() << ", " << prevLocation.getLatitude()); 
   NS_LOG_FUNCTION(this << "DestLocation field: " << destLocation.getLongitude() << ", " << destLocation.getLatitude()); 

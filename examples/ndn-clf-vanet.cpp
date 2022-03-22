@@ -29,6 +29,8 @@
 #include "ns3/ndnSIM/NFD/daemon/face/generic-link-service.hpp"
 #include "model/v2v-ndn-net-device-transport.hpp"
 
+#include "ns3/netanim-module.h"
+
 using namespace std;
 namespace ns3 {
 
@@ -84,8 +86,8 @@ main(int argc, char* argv[])
   // disable fragmentation
   Config::SetDefault("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue("2200"));
   Config::SetDefault("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue("2200"));
-  Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode",
-                     StringValue("OfdmRate24Mbps"));
+  //Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode",
+  //                   StringValue("OfdmRate24Mbps"));
 
   CommandLine cmd;
   cmd.Parse(argc, argv);
@@ -98,6 +100,10 @@ main(int argc, char* argv[])
   wifi.SetStandard(WIFI_PHY_STANDARD_80211a);
   wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager", "DataMode",
                                StringValue("OfdmRate24Mbps"));
+
+  //wifi.SetStandard(WIFI_PHY_STANDARD_80211b);
+  /*wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager", "DataMode",
+                               StringValue("DsssRate1Mbps"));*/
   
   //wifi.EnableLogComponents();
 
@@ -105,8 +111,12 @@ main(int argc, char* argv[])
   wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
   //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.0)); // range = 46
   //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.5)); // range = 26
-  wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (2.085)); // range = 34
+  //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (2.085)); // range = 251 
+  //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (2.35)); // range = 134
   
+  double range = 120; // 46
+  wifiChannel.AddPropagationLoss ("ns3::RangePropagationLossModel",
+                                  "MaxRange", DoubleValue(range));
   // YansWifiPhy wifiPhy = YansWifiPhy::Default();
   YansWifiPhyHelper wifiPhyHelper = YansWifiPhyHelper::Default();
   wifiPhyHelper.SetChannel(wifiChannel.Create());
@@ -114,11 +124,11 @@ main(int argc, char* argv[])
   WifiMacHelper wifiMacHelper;
   wifiMacHelper.SetType("ns3::AdhocWifiMac");
 
-  std::string traceFile="/vagrant/ndnSIM/ns-3/mhg_scenario_9_node.ns_movements"; 
+  std::string traceFile="/vagrant/ndnSIM/ns-3/mhg_scenario_40_node_1_lane.ns_movements"; 
   //std::string traceFile="/vagrant/mhg_scenario_100_node.ns_movements"; 
   Ns2MobilityHelper ns2 = Ns2MobilityHelper (traceFile);
 
-  int numOfNodes = 10;
+  int numOfNodes = 40;
   NodeContainer nodes;
   nodes.Create(numOfNodes);
 
@@ -164,12 +174,12 @@ main(int argc, char* argv[])
     producerHelper.Install(nodes.Get(nodeNo));
   }*/
   ////////////////
+  
+  Simulator::Stop(Seconds(60.0));
 
-  Simulator::Stop(Seconds(590.0));
-
-  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/9-mobile-grid-rate-trace.txt", Seconds(589.0));
-  L2RateTracer::InstallAll("/vagrant/ndnSIM/9-mobile-grid-rate-drop-trace.txt", Seconds(589.0));
-  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/9-mobile-grid-app-delays-trace.txt");
+  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/40-mobile-grid-clf-rate-trace.txt", Seconds(59.0));
+  L2RateTracer::InstallAll("/vagrant/ndnSIM/40-mobile-grid-clf-rate-drop-trace.txt", Seconds(59.0));
+  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/40-mobile-grid-clf-app-delays-trace.txt");
   
   Simulator::Run();
   Simulator::Destroy();

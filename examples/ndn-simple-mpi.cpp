@@ -154,7 +154,7 @@ main(int argc, char* argv[])
     ndn::L3RateTracer::Install(node2, "node2.txt", Seconds(0.5));
   }
 
-  Simulator::Stop(Seconds(400.0));
+  Simulator::Stop(Seconds(60.0));
 
   Simulator::Run();
   Simulator::Destroy();

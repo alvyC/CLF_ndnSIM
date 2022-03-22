@@ -20,6 +20,8 @@
 #ifndef V2V_NDN_NET_DEVICE_TRANSPORT_HPP
 #define V2V_NDN_NET_DEVICE_TRANSPORT_HPP
 
+#include <queue>
+
 #include "ns3/ndnSIM/model/ndn-common.hpp"
 #include "ns3/ndnSIM/NFD/daemon/face/transport.hpp"
 
@@ -28,7 +30,7 @@
 #include "ns3/packet.h"
 #include "ns3/node.h"
 #include "ns3/pointer.h"
-
+#include "ns3/event-id.h"
 #include "ns3/point-to-point-net-device.h"
 #include "ns3/channel.h"
 
@@ -57,6 +59,21 @@ public:
 
   virtual ssize_t
   getSendQueueLength() final;
+  
+  void
+  sendBeacon();
+  
+  void
+  sendNoOfNeighborToStrategy();
+  
+  void
+  sendInterestFromQueue();
+  
+  void
+  clearIsNeighbor();
+
+  void
+  deleteNeighbor(int nodeId);
 
 private:
   virtual void
@@ -74,6 +91,16 @@ private:
 
   Ptr<NetDevice> m_netDevice; ///< \brief Smart pointer to NetDevice
   Ptr<Node> m_node;
+
+  bool isNeighbor;
+  ns3::EventId clearIsNeighborEid;
+  std::queue<Ptr<ns3::Packet>> interestQueue;
+
+  std::map<int, ns3::EventId> listOfNeighbor;
+
+  static const int NeighExpTimer;
+  static const int BeaconTimer;
+  static const std::string STRATEGY;
 };
 
 } // namespace ndn

@@ -26,6 +26,9 @@
 
 #include "ns3/ndnSIM-module.h"
 
+#include "ns3/wifi-80211p-helper.h"
+#include "ns3/wave-mac-helper.h"
+
 #include "ns3/ndnSIM/NFD/daemon/face/generic-link-service.hpp"
 #include "model/v2v-ndn-net-device-transport.hpp"
 
@@ -81,53 +84,52 @@ V2VNetDeviceFaceCallback (Ptr<Node> node, Ptr<ndn::L3Protocol> ndn,
 int
 main(int argc, char* argv[])
 {
-  std::string phyMode("DsssRate1Mbps"); // for 802.11b
-  //std::string phyMode("OfdmRate24Mbps"); // for 802.11a
+  std::string phyMode ("OfdmRate6MbpsBW10MHz");
  
   // disable fragmentation
-  //Config::SetDefault("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue("2200"));
-  //Config::SetDefault("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue("100"));
-  Config::SetDefault("ns3::WifiRemoteStationManager::RtsCtsThreshold", UintegerValue(100));
-  //Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode",
-  //                   StringValue(phyMode));
+  /*
+  Config::SetDefault("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue("2200"));
+  Config::SetDefault("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue("2200"));
+  Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode",
+                     StringValue(phyMode));
+  */
+  
   CommandLine cmd;
   cmd.Parse(argc, argv);
-
-  //////////////////////
-  //////////////////////
-  //////////////////////
-  WifiHelper wifi;
-  // wifi.SetRemoteStationManager ("ns3::AarfWifiManager");
-  //wifi.SetStandard(WIFI_PHY_STANDARD_80211a);
-  wifi.SetStandard(WIFI_PHY_STANDARD_80211b);
-  wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager", 
-                                "DataMode", StringValue(phyMode),
-                                "ControlMode", StringValue(phyMode));
- 
-  //wifi.EnableLogComponents();
-
-  YansWifiChannelHelper wifiChannel; // = YansWifiChannelHelper::Default ();
+  
+  // the channel
+  YansWifiChannelHelper wifiChannel;
   wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
-  //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.0)); // range = 46
-  double range = 46; // 46
+  //wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel", "Exponent", DoubleValue (3.0)); // range = 120 
+  double range = 100;
   wifiChannel.AddPropagationLoss ("ns3::RangePropagationLossModel",
-                                  "MaxRange", DoubleValue(range));
+                                  "MaxRange", DoubleValue(range)); 
+  Ptr<YansWifiChannel> channel = wifiChannel.Create ();
+  YansWifiPhyHelper wifiPhy =  YansWifiPhyHelper::Default ();
+  wifiPhy.SetChannel (channel);
+ 
+  //wifiPhy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11);
+   
+  // Setup WAVE PHY and MAC
+  NqosWaveMacHelper wifi80211pMac = NqosWaveMacHelper::Default ();
+  Wifi80211pHelper wifi80211p = Wifi80211pHelper::Default ();
+  
+  // enable logging 
+  //wifi80211p.EnableLogComponents (); 
+  
+  // Setup 802.11p stuff
+  wifi80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
+                                      "DataMode", StringValue (phyMode),
+                                      "ControlMode", StringValue (phyMode));
 
-  // YansWifiPhy wifiPhy = YansWifiPhy::Default();
-  YansWifiPhyHelper wifiPhyHelper = YansWifiPhyHelper::Default();
-  //wifiPhyHelper.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11_RADIO);
-  wifiPhyHelper.SetChannel(wifiChannel.Create());
-
-  WifiMacHelper wifiMacHelper;
-  wifiMacHelper.SetType("ns3::AdhocWifiMac");
+  //WifiMacHelper wifiMacHelper;
+  //wifiMacHelper.SetType("ns3::AdhocWifiMac");
   
   MobilityHelper mobility;
-  
   // transimission range is 46 
-  double distance = 40; // 40//802.11a
-  //double distance = 50; // 802.11b , exp=3
+  //double distance = 250;
   //double distance = 30;
-  //double distance = 90;
+  double distance = 90;
   mobility.SetPositionAllocator ("ns3::GridPositionAllocator",
                                  "MinX", DoubleValue (1.0),
                                  "MinY", DoubleValue (1.0),
@@ -135,17 +137,22 @@ main(int argc, char* argv[])
                                  "DeltaY", DoubleValue (distance),
                                  "GridWidth", UintegerValue (3),
                                  "LayoutType", StringValue ("RowFirst"));
-  
+
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
-  
+
   int numOfNodes = 9;
   NodeContainer nodes;
   nodes.Create(numOfNodes);
 
   ////////////////
   // 1. Install Wifi
-  NetDeviceContainer wifiNetDevices = wifi.Install(wifiPhyHelper, wifiMacHelper, nodes);
-  //wifiPhyHelper.EnablePcap ("ndn-clf-grid-wifi", wifiNetDevices);
+  //NetDeviceContainer wifiNetDevices = wifi.Install(wifiPhyHelper, wifiMacHelper, nodes);
+  NetDeviceContainer wifiNetDevices = wifi80211p.Install (wifiPhy, wifi80211pMac, nodes);
+  
+  // tracing
+  //wifiPhy.EnablePcap ("ndn-clf-grid-80211p", wifiNetDevices);
+
+  
   // 2. Install Mobility model
   mobility.Install(nodes);
 
@@ -167,12 +174,13 @@ main(int argc, char* argv[])
   // 4. Set up applications
   NS_LOG_INFO("Installing Applications");
 
-  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
-  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
+  //ndn::AppHelper consumerHelper("ns3::ndn::ConsumerCbr");
+  ndn::AppHelper consumerHelper("ns3::ndn::ConsumerBatches");
   consumerHelper.SetPrefix("/test/prefix/a/b");
-  consumerHelper.SetAttribute("Frequency", DoubleValue(1.0));
+  //consumerHelper.SetAttribute("Frequency", DoubleValue(1.0));
   //consumerHelper.SetAttribute("MaxSeq", IntegerValue(5));
-  //consumerHelper.SetAttribute("Batches", StringValue("10s 1 14s 1"));
+  //consumerHelper.SetAttribute("Batches", StringValue("1s 1 8s 1 14s 1 20s 1"));
+  consumerHelper.SetAttribute("Batches", StringValue("2s 1 3s 1"));
   //consumerHelper.SetAttribute("Batches", StringValue("1s 1 2s 1 3s 1 4s 1 5s 1 6s 1 7s 1 8s 1 9s 1 10s 1"));
   consumerHelper.Install(nodes.Get(0));
 
@@ -180,7 +188,6 @@ main(int argc, char* argv[])
   producerHelper.SetPrefix("/test/prefix");
   producerHelper.SetAttribute("PayloadSize", StringValue("1200"));
   producerHelper.Install(nodes.Get(numOfNodes - 1));
- 
   /*for (int i = 0; i < 10; i++) {
     int nodeNo = rand() % numOfNodes;
     producerHelper.Install(nodes.Get(nodeNo));
@@ -188,11 +195,11 @@ main(int argc, char* argv[])
 
   ////////////////
 
-  Simulator::Stop(Seconds(60.0));
+  Simulator::Stop(Seconds(5.0));
 
-  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/9-static-grid-clf-rate-trace.txt", Seconds(59.0));
-  L2RateTracer::InstallAll("/vagrant/ndnSIM/9-static-grid-clf-drop-trace.txt", Seconds(59.0));
-  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/9-static-grid-clf-app-delays-trace.txt");
+  ndn::L3RateTracer::InstallAll("/vagrant/ndnSIM/16-static-grid-clf-rate-trace.txt", Seconds(5.0));
+  L2RateTracer::InstallAll("/vagrant/ndnSIM/16-static-grid-clf-drop-trace.txt", Seconds(5.0));
+  ndn::AppDelayTracer::InstallAll("/vagrant/ndnSIM/16-static-grid-clf-app-delays-trace.txt");
   
   Simulator::Run();
   Simulator::Destroy();
